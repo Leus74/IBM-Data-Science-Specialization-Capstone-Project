@@ -1,0 +1,129 @@
+﻿# Import required libraries
+
+import pandas as pd
+import dash
+from dash import dcc
+from dash import html
+from dash.dependencies import Input, Output
+import plotly.express as px
+
+path = ''
+spacex_data = pd.read_csv(path + 'spacex_launch_dash.csv')
+spacex_df = pd.DataFrame(spacex_data)
+
+# spacex_df.head()
+
+spacex_df = spacex_df.iloc[:,1:7]
+# spacex_df.head()
+
+#spacex_df['Launch Site'].unique()
+
+Min_Pld = int(spacex_df['Payload Mass (kg)'].min())
+Max_Pld = int(spacex_df['Payload Mass (kg)'].max())
+Pld_Step = int(Max_Pld/10)
+pl = list(range(Min_Pld, Max_Pld + Pld_Step, Pld_Step))
+lbls = list(range(0,12))
+# print(pl, lbls)
+
+# Create a dash application
+app = dash.Dash(__name__)
+
+# Task 3 layout
+app.layout = html.Div(children=[html.H1('SpaceX Falcon_9 Success Launch Analytics', 
+                                         style={'textAlign': 'center',
+                                                'color':'#503D36',
+                                                'font-size': 30}),
+                               html.Div(["site-dropdown: ", 
+                                         dcc.Dropdown(id='site-dropdown',
+                                                      options=[{'label': 'All', 'value': 'ALL'},
+                                                               {'label': 'CCAFS LC-40', 'value': 'CCAFS LC-40'},
+                                                               {'label': 'CCAFS SLC-40', 'value': 'CCAFS SLC-40'},
+                                                               {'label': 'KSC LC-39A', 'value': 'KSC LC-39A'},
+                                                               {'label': 'VAFB SLC-4E', 'value': 'VAFB SLC-4E'},],
+                                                      value='ALL', 
+                                                      # placeholder="Coose a Launch Site", 
+                                                      searchable=True),
+                                         html.Div([html.Div(dcc.Graph(id='success-site_pie-chart'))],
+                                                  style={'display':'flex'}),]),
+                               html.Div(["payload-slider: ", 
+                                         dcc.RangeSlider(id='payload-slider', 
+                                                         min=Min_Pld, 
+                                                         max=Max_Pld,
+                                                         value=[Min_Pld, Max_Pld]
+                                                        ), 
+                                                         #updatemode='drag'), 
+                                         html.Div([html.Div(dcc.Graph(id='success-payload_scatter-chart'))],
+                                                  style={'display':'flex'}),])])
+
+spx_site_success = spacex_df.groupby(['Launch Site'])['class'].sum().rename('Success Launches')
+spx_site_success = pd.DataFrame(spx_site_success).reset_index()
+# spx_site_success.head()
+
+spx_site_unsuccess = spacex_df[spacex_df['class']==0].groupby(['Launch Site'])
+spx_site_unsuccess = spx_site_unsuccess['class'].count().rename('Unsuccess Launches').reset_index()
+# spx_site_unsuccess
+
+# spx_site_success.append(spx_site_unsuccess['Unsuccess Launches'])
+spx_site_launch_outcomes = pd.concat([spx_site_success, spx_site_unsuccess['Unsuccess Launches']], axis=1)
+# spx_site_launch_outcomes
+
+def to_string(lista):
+    for n in range(len(lista)):
+        lista[n] = str(lista[n])
+    return lista
+    
+to_string(pl)
+# to_string(lbls)
+print(pl, lbls)
+
+marks = dict(zip(lbls, pl))
+# marks
+# value = int(round(len(marks)/2))
+value = marks[int(round(len(marks)/2))]
+value
+
+spacex_df[spacex_df['Launch Site']=='CCAFS LC-40'].pivot_table(index='class', values='Launch Site', aggfunc = 'count').reset_index()
+
+rango = [525.0, 500.0, 677.0]
+rango = pd.Series(rango)
+spx_payload_success = spacex_df[(spacex_df['Payload Mass (kg)'] >= rango.min()) & (spacex_df['Payload Mass (kg)'] <= rango.max())][['Payload Mass (kg)', 'class']]
+spx_payload_success.head()
+
+@app.callback(Output(component_id='success-site_pie-chart', component_property='figure'),
+              Input(component_id='site-dropdown', component_property='value'))  
+
+def charts(entered_site):
+    
+    if entered_site == 'ALL':
+        fig_1 = px.pie(spx_site_success,'Launch Site', 
+                     'Success Launches',
+                     title='Number of Success Launches per Site')
+    else:
+        spx_entered_site = spacex_df[spacex_df['Launch Site']==entered_site]
+        spx_entered_site = spx_entered_site.pivot_table(index='class', values='Launch Site', 
+                                                        aggfunc = 'count').reset_index()
+        fig_1 = px.pie(spx_entered_site, 
+                       'class', 
+                       'Launch Site', 
+                       title = 'Success (1) vs. Failed (0) Launches from ' + entered_site + ' site')
+    return fig_1
+        
+
+@app.callback(Output('success-payload_scatter-chart', 'figure'),
+              Input('payload-slider', 'value'))
+              
+def get_scatter_plot(entered_payload):
+    
+    Min = entered_payload[0]
+    Max = entered_payload[1]
+    spx_entered_payload = spacex_df[(spacex_df['Payload Mass (kg)'] >= Min) & (spacex_df['Payload Mass (kg)'] <= Max)]
+    
+    fig_2 = px.scatter(spx_entered_payload, 'Payload Mass (kg)', 'class', color = 'Launch Site')
+    
+    return fig_2
+
+if __name__ == '__main__':
+    # app.run(port=8098, debug=True)
+    app.run(port=5051, debug=True)
+
+    
